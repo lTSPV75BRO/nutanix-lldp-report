@@ -82,6 +82,30 @@ command_timeout_seconds: 10
 host_timeout_minutes: 5
 log_file: mylog.log
 
+---
+
+## Building Binaries
+
+You can build the executable binaries for your target platform using Go. For example:
+
+Linux AMD64
+GOOS=linux GOARCH=amd64 go build -ldflags="-X main.version=v1.0.0 -X main.buildDate=$(date +%Y-%m-%d)" -o getTor-linux-amd64 main.go
+
+macOS AMD64
+GOOS=darwin GOARCH=amd64 go build -ldflags="-X main.version=v1.0.0 -X main.buildDate=$(date +%Y-%m-%d)" -o getTor-darwin-amd64 main.go
+
+Windows AMD64
+GOOS=windows GOARCH=amd64 go build -ldflags="-X main.version=v1.0.0 -X main.buildDate=$(date +%Y-%m-%d)" -o getTor-windows-amd64.exe main.go
+
+text
+
+Place your built binaries in a `dist/` folder or similar for easier management.
+
+---
+
+## Releases
+
+Pre-built binaries for supported platforms are available in the [Releases](https://github.com/lTSPV75BRO/nutanix-lldp-report/releases) section of this repository, making it easy to download and use without building from source.
 
 ---
 
