@@ -1,5 +1,6 @@
 *.log
 debug_output/
+dist/
 *.csv
 *.log
 *.txt
