@@ -1,0 +1,14 @@
+*.log
+debug_output/
+*.csv
+*.log
+*.txt
+*.json
+*.yaml
+*.yml
+*.ini
+*.conf
+*.cfg
+*.config
+*.config.yaml
+*.config.yml
