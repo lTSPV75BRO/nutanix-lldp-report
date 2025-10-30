@@ -545,10 +545,24 @@ func sshConnect(hostIp string) (*ssh.Client, error) {
 			"user":    sshUser,
 			"attempt": attempt,
 		}).Debug("Connecting via SSH")
+		// Read and parse the allowed host public key (host key file configured via ssh_host_key_file)
+		hostKeyPath := viper.GetString("ssh_host_key_file")
+		if hostKeyPath == "" {
+			return nil, fmt.Errorf("missing required SSH host key file config (ssh_host_key_file)")
+		}
+		publicKeyBytes, err := os.ReadFile(hostKeyPath)
+		if err != nil {
+			return nil, fmt.Errorf("unable to read SSH host key file: %v", err)
+		}
+		publicKey, err := ssh.ParsePublicKey(publicKeyBytes)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse SSH host public key: %v", err)
+		}
+
 		config := &ssh.ClientConfig{
 			User:            sshUser,
 			Auth:            auth,
-			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+			HostKeyCallback: ssh.FixedHostKey(publicKey),
 			Timeout:         sshTimeout,
 		}
 		client, err = ssh.Dial("tcp", hostIp+":22", config)
