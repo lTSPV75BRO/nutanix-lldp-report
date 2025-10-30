@@ -71,7 +71,7 @@ import (
 
 // Embedded version info (set via ldflags during build, e.g., go build -ldflags="-X main.version=1.0.0 -X main.buildDate=$(date +%Y-%m-%d)")
 var (
-	version   = "dev"
+	version   = "1.0.1"
 	buildDate = "unknown"
 )
 
@@ -141,6 +141,7 @@ func main() {
 	sshPassPtr := flag.String("sshpass", "", "Password for SSH user (overrides config/env)")
 	sshKeyFilePtr := flag.String("sshkey", "", "Path to SSH private key file (overrides config)")
 	createConfigFlag := flag.Bool("create-config", false, "Create a dummy config file and exit")
+	insecureSkipFlag := flag.Bool("insecure-skip", false, "Skip TLS certificate verification for HTTPS (NOT recommended for production)")
 	flag.BoolVar(&debugMode, "debug", false, "Enable debug mode")
 	showVersion := flag.Bool("version", false, "Show version and build info")
 	configFile := flag.String("config", defaultConfigFile, "Path to config file (without extension)")
@@ -244,6 +245,13 @@ func main() {
 	if debugMode {
 		logger.SetLevel(logrus.DebugLevel)
 		logger.Debug("Debug mode enabled")
+	}
+	// Override with flags if set (flags take highest precedence)
+	if insecureSkipFlag != nil && *insecureSkipFlag {
+		viper.Set("insecure_skip", true)
+	}
+	if viper.GetBool("insecure_skip") {
+		logger.Warn("TLS verification is disabled due to --insecure-skip (use only for trusted/self-signed targets)")
 	}
 
 	// Update logger output if log_file changed
@@ -384,6 +392,7 @@ host_ip_file: host_ips.txt  # File with direct host IPs (or env GETTOR_HOST_IP_F
 # command_timeout_seconds: 5  # SSH command timeout
 # host_timeout_minutes: 2  # Per-host processing timeout
 # log_file: getTor.log  # Log file path
+# insecure_skip: false  # Set true to skip TLS certificate verification (NOT recommended)
 # debug: true # Set Debug true/false # Feature not yet implemented!!
 `
 
@@ -455,9 +464,8 @@ func fetchHostIps(pcIp string) ([]string, error) {
 		req.SetBasicAuth(apiUser, viper.GetString("api_pass"))
 		req.Header.Set("Content-Type", "application/json")
 
-		tr := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
+		tr := http.DefaultTransport.(*http.Transport).Clone()
+		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: viper.GetBool("insecure_skip")}
 		client := &http.Client{Transport: tr, Timeout: apiTimeout}
 		resp, respErr := client.Do(req)
 		if respErr != nil {
