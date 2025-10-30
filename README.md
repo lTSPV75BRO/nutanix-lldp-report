@@ -47,17 +47,18 @@ getTor
 
 | Flag                       | Description                                                      | Example                                |
 |----------------------------|------------------------------------------------------------------|----------------------------------------|
-| `--apipass`               | API password (overrides config/env)                              | `--apipass mypassword`                |
-| `--sshpass`               | SSH password (overrides config/env)                                | `--sshpass mysshpassword`             |
-| `--sshkey`                | Path to SSH private key (preferred over password)                | `--sshkey /path/to/private/key`       |
-| `--config`                | Path to config file (without extension)                           | `--config custom_config`              |
-| `--create-config`         | Generate a dummy config file and exit                            | `--create-config`                     |
-| `--debug`                 | Enable verbose debug output                                        | `--debug`                            |
-| `--version`               | Show version and build details                                    | `--version`                          |
+| `-apipass`               | API password (overrides config/env)                              | `-apipass mypassword`                |
+| `-sshpass`               | SSH password (overrides config/env)                                | `-sshpass mysshpassword`             |
+| `-sshkey`                | Path to SSH private key (preferred over password)                | `-sshkey /path/to/private/key`       |
+| `-config`                | Path to config file (without extension)                           | `-config custom_config`              |
+| `-create-config`         | Generate a dummy config file and exit                            | `-create-config`                     |
+| `-debug`                 | Enable verbose debug output                                        | `-debug`                            |
+| `-insecure-skip`         | Skip TLS certificate verification                                 | `-insecure-skip`                     |
+| `-version`               | Show version and build details                                    | `-version`                          |
 
 ### Example
 
-```getTor --pcs --apipass mypassword --sshkey ~/.ssh/id_rsa --create-config```
+```getTor -pcs -apipass mypassword -sshkey ~/.ssh/id_rsa -create-config```
 
 
 ### Configuration File (`config.yaml`)
@@ -85,21 +86,39 @@ log_file: mylog.log
 
 ---
 
+## Sample Output
+
+```
+Host IP,Hostname,Interface,MAC Address,PCI Slot,NIC Model,Interface Status,Peer Switch,Peer Port ID,Port Description,Redundancy
+10.48.X2.XX,Galactus-4,eth0,40:a6:b7:94:XX:XX,Slot 1,Intel Corporation Ethernet Controller XXV710 for 25GbE SFP28,up,p4r6r09-leaf1,ethernet22:4,Big Cloud Fabric Switch Port ethernet22:4,REDUNDANT
+10.48.X2.XX,Galactus-4,eth1,40:a6:b7:94:XX:XX,Slot 1,Intel Corporation Ethernet Controller XXV710 for 25GbE SFP28,up,p4r6r09-leaf2,ethernet22:4,Big Cloud Fabric Switch Port ethernet22:4,REDUNDANT
+10.48.X2.XX,Galactus-5,eth0,00:e0:ed:e9:XX:XX,Slot 1,Intel Corporation Ethernet Controller XXV710 for 25GbE SFP28,up,p4r6r09-leaf1,ethernet23:2,Big Cloud Fabric Switch Port ethernet23:2,REDUNDANT
+10.48.X2.XX,Galactus-5,eth1,00:e0:ed:e9:XX:XX,Slot 1,Intel Corporation Ethernet Controller XXV710 for 25GbE SFP28,up,p4r6r09-leaf2,ethernet23:2,Big Cloud Fabric Switch Port ethernet23:2,REDUNDANT
+10.48.X2.XX,Galactus-2,eth0,40:a6:b7:94:XX:XX,Slot 1,Intel Corporation Ethernet Controller XXV710 for 25GbE SFP28,up,p4r6r09-leaf1,ethernet22:2,Big Cloud Fabric Switch Port ethernet22:2,REDUNDANT
+10.48.X2.XX,Galactus-2,eth1,40:a6:b7:94:XX:XX,Slot 1,Intel Corporation Ethernet Controller XXV710 for 25GbE SFP28,up,p4r6r09-leaf2,ethernet22:2,Big Cloud Fabric Switch Port ethernet22:2,REDUNDANT
+10.48.X2.XX,Galactus-3,eth0,40:a6:b7:94:XX:XX,Slot 1,Intel Corporation Ethernet Controller XXV710 for 25GbE SFP28,up,p4r6r09-leaf1,ethernet22:3,Big Cloud Fabric Switch Port ethernet22:3,REDUNDANT
+10.48.X2.XX,Galactus-3,eth1,40:a6:b7:94:XX:XX,Slot 1,Intel Corporation Ethernet Controller XXV710 for 25GbE SFP28,up,p4r6r09-leaf2,ethernet22:3,Big Cloud Fabric Switch Port ethernet22:3,REDUNDANT
+10.48.X2.XX,Galactus-1,eth0,40:a6:b7:94:XX:XX,Slot 1,Intel Corporation Ethernet Controller XXV710 for 25GbE SFP28,up,p4r6r09-leaf1,ethernet22:1,Big Cloud Fabric Switch Port ethernet22:1,REDUNDANT
+10.48.X2.XX,Galactus-1,eth1,40:a6:b7:94:XX:XX,Slot 1,Intel Corporation Ethernet Controller XXV710 for 25GbE SFP28,up,p4r6r09-leaf2,ethernet22:1,Big Cloud Fabric Switch Port ethernet22:1,REDUNDANT
+```
+
+---
+
 ## Building Binaries
 
 You can build the executable binaries for your target platform using Go. For example:
 
 Linux AMD64  
-```GOOS=linux GOARCH=amd64 go build -ldflags="-X main.version=v1.0.0 -X main.buildDate=$(date +%Y-%m-%d)" -o getTor-linux-amd64 main.go```
+```GOOS=linux GOARCH=amd64 go build -ldflags="-X main.version=Cust_Version -X main.buildDate=$(date +%Y-%m-%d)" -o getTor-linux-amd64 main.go```
 
 macOS AMD64  
-```GOOS=darwin GOARCH=amd64 go build -ldflags="-X main.version=v1.0.0 -X main.buildDate=$(date +%Y-%m-%d)" -o getTor-darwin-amd64 main.go```
+```GOOS=darwin GOARCH=amd64 go build -ldflags="-X main.version=Cust_Version -X main.buildDate=$(date +%Y-%m-%d)" -o getTor-darwin-amd64 main.go```
 
 macOS ARM64  
-```GOOS=darwin GOARCH=arm64 go build -ldflags="-X main.version=v1.0.0 -X main.buildDate=$(date +%Y-%m-%d)" -o getTor-darwin-arm64 main.go```
+```GOOS=darwin GOARCH=arm64 go build -ldflags="-X main.version=Cust_Version -X main.buildDate=$(date +%Y-%m-%d)" -o getTor-darwin-arm64 main.go```
 
 Windows AMD64  
-```GOOS=windows GOARCH=amd64 go build -ldflags="-X main.version=v1.0.0 -X main.buildDate=$(date +%Y-%m-%d)" -o getTor-windows-amd64.exe main.go```
+```GOOS=windows GOARCH=amd64 go build -ldflags="-X main.version=Cust_Version -X main.buildDate=$(date +%Y-%m-%d)" -o getTor-windows-amd64.exe main.go```
 
   
 > Place your built binaries in a `dist/` folder or similar for easier management.
