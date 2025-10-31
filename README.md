@@ -56,7 +56,7 @@ getTor
 | `-insecure-skip`         | Skip TLS certificate verification                                 | `-insecure-skip`                     |
 | `-insecure-ssh`         | Skip SSH host key verification (NOT recommended)                   | `-insecure-ssh`                     |
 | `-show-env`                 | Display environment variables that can be used                | `-show-env`                            |
-| `-ssh-known-hosts`         | Path to SSH known_hosts file (defaults to ~/.ssh/known_hosts)   `-ssh-known-hosts /path/to/known_hosts` |
+| `-ssh-known-hosts`         | Path to SSH known_hosts file (defaults to ~/.ssh/known_hosts)   |`-ssh-known-hosts /path/to/known_hosts` |
 | `-version`               | Show version and build details                                    | `-version`                          |
 
 ### Example
