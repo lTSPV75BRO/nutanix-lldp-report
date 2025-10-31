@@ -4,36 +4,41 @@
 //     It supports querying Nutanix Prism Central (PC) APIs for host discovery or direct host IP input.
 //
 // Usage:
-//     - Configuration can be via flags, environment variables, or a config file (config.yaml or config.json).
-//     - Run the program with:
-//         getTor --pcs              # to use PC API
-//         getTor                    # to use direct host IPs
-//         getTor --apipass APIPASS  # Password for PC API user (or env: API_PASS)
-//         getTor --sshpass SSHPASS  # Password for SSH user (or env: SSH_PASS)
-//         getTor --sshkey KEYFILE   # Path to SSH private key file (preferred over password)
-//         getTor --debug            # Enable verbose debug output
-//         getTor --version          # Show version and build info
-//         getTor --config FILE      # Path to config file (without extension)
-//         getTor --create-config    # Create a dummy config file and exit
+// - Configuration can be via flags, environment variables, or a config file (config.yaml or config.json).
+// - Run the program with:
+//   getTor --pcs              # to use PC API
+//   getTor                    # to use direct host IPs
+//   getTor --api-pass <API_PASS> # Password for PC API user (or env: GETTOR_API_PASS)
+//   getTor --ssh-pass <SSH_PASS> # Password for SSH user (or env: GETTOR_SSH_PASS)
+//   getTor --ssh-key <KEY_FILE>  # Path to SSH private key file (preferred over password)
+//   getTor --debug            # Enable verbose debug output
+//   getTor --version          # Show version and build info
+//   getTor --config <FILE>    # Path to config file (without extension)
+//   getTor --create-config    # Create a dummy config file and exit
 //
 // Config File Example (config.yaml):
+//
 // api_user: admin
-// api_pass: yourapipass
+// # api_pass: yourapipass_here  # Provide your PC API password or override with --apipass or env GETTOR_API_PASS
 // ssh_user: root
-// ssh_pass: yoursshpass  # Avoid if using key
-// ssh_key_file: /path/to/key
-// pc_ip_file: pc_ips.txt
-// host_ip_file: host_ips.txt
-// csv_file: output.csv
-// max_threads: 20
-// debug_dir: my_debug
-// max_retries: 5
-// base_retry_delay_seconds: 3
-// api_timeout_seconds: 15
-// ssh_timeout_seconds: 15
-// command_timeout_seconds: 10
-// host_timeout_minutes: 5
-// log_file: mylog.log
+// # ssh_pass: your_ssh_password_here  # SSH password (less secure; prefer ssh_key_file or env GETTOR_SSH_PASS)
+// # ssh_key_file: /path/to/private_key  # Preferred SSH key file path (or env GETTOR_SSH_KEY_FILE)
+// pc_ip_file: pc_ips.txt  # File with Nutanix PC IPs for --pcs (or env GETTOR_PC_IP_FILE)
+// host_ip_file: host_ips.txt  # File with direct host IPs (or env GETTOR_HOST_IP_FILE)
+// # csv_file: lldp_neighbors.csv  # Output CSV filename
+// # max_threads: 10  # Max concurrent threads
+// # debug_dir: debug_output  # Directory for debug outputs
+// # max_retries: 3  # Max retries for operations
+// # base_retry_delay_seconds: 2  # Base delay for retries
+// # api_timeout_seconds: 10  # API request timeout
+// # ssh_timeout_seconds: 10  # SSH connection timeout
+// # command_timeout_seconds: 5  # SSH command timeout
+// # host_timeout_minutes: 2  # Per-host processing timeout
+// # log_file: getTor.log  # Log file path
+// # insecure_skip: false  # Set true to skip TLS certificate verification (NOT recommended)
+// # sshknownhostsfile: "/path/to/your/known_hosts" # Optional: Path to SSH known_hosts file. Defaults to ~/.ssh/known_hosts.
+// # insecuressh: false # Optional: Set to true to skip SSH host key verification. NOT RECOMMENDED.
+// # debug: true # Set Debug true/false # Feature not yet implemented!!
 //
 // Disclaimer:
 //     Use at your own risk. Running this program implies acceptance of associated risks.
@@ -56,6 +61,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
@@ -67,11 +73,13 @@ import (
 	"github.com/sirupsen/logrus" // Structured logging
 	"github.com/spf13/viper"     // Configuration management
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/knownhosts"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 // Embedded version info (set via ldflags during build, e.g., go build -ldflags="-X main.version=1.0.0 -X main.buildDate=$(date +%Y-%m-%d)")
 var (
-	version   = "1.0.1"
+	version   = "1.0.3"
 	buildDate = "unknown"
 )
 
@@ -112,6 +120,10 @@ const (
 	defaultSshTimeout     = 10 * time.Second
 	defaultCommandTimeout = 5 * time.Second
 	defaultHostTimeout    = 2 * time.Minute
+	defaultLogMaxSize     = 10 // megabytes
+	defaultLogMaxBackups  = 3
+	defaultLogMaxAge      = 28 // days
+	defaultLogCompress    = true
 	defaultLogFile        = "getTor.log"
 	enroll                = `CiAgICAgXyAgIF8gX19fX19fX18gXyAgIF8gIF9fICAgICAgX18KICAgIHwgXCB8IHwtLS0tLS0tLXwgXCB8IHwgXCBcICAgIC8gLwogICAgfCAgXHwgfCAgIHx8ICAgfCAgXHwgfCAgXCBcICAvIC8KICAgIHwgLiBgIHwgICB8fCAgIHwgLiBgIHwgICB8IHx8IHwKICAgIHwgfFwgIHwgICB8fCAgIHwgfFwgIHwgIC8gLyAgXCBcCiAgICB8X3wgXF98ICAgfHwgICB8X3wgXF98IC9fLyAgICBcX1wKCkRldmVsb3BlZCBieSBQcmFqd2FsIFZlcm5la2FyIGF0IE51dGFuaXgK`
 )
@@ -144,7 +156,10 @@ func main() {
 	insecureSkipFlag := flag.Bool("insecure-skip", false, "Skip TLS certificate verification for HTTPS (NOT recommended for production)")
 	flag.BoolVar(&debugMode, "debug", false, "Enable debug mode")
 	showVersion := flag.Bool("version", false, "Show version and build info")
+	showEnvFlag := flag.Bool("show-env", false, "Display environment variables that can be used")
 	configFile := flag.String("config", defaultConfigFile, "Path to config file (without extension)")
+	insecureSshFlag := flag.Bool("insecure-ssh", false, "Skip SSH host key verification (NOT recommended)")
+	knownHostsFilePtr := flag.String("ssh-known-hosts", "", "Path to SSH known_hosts file (defaults to ~/.ssh/known_hosts)")
 	flag.Parse()
 
 	if *showVersion {
@@ -152,6 +167,11 @@ func main() {
 		os.Exit(0)
 	}
 
+	if *showEnvFlag {
+		printEnvironmentVariables()
+		os.Exit(0)
+	}
+	setupLogging()
 	// Load config with Viper
 	viper.SetConfigName(*configFile)
 	viper.AddConfigPath(".")
@@ -165,6 +185,10 @@ func main() {
 		}
 	}
 
+	viper.SetDefault("log_max_size", defaultLogMaxSize)
+	viper.SetDefault("log_max_backups", defaultLogMaxBackups)
+	viper.SetDefault("log_max_age", defaultLogMaxAge)
+	viper.SetDefault("log_compress", defaultLogCompress)
 	// Override defaults with config values
 	apiUser = viper.GetString("api_user")
 	if apiUser == "" {
@@ -251,7 +275,17 @@ func main() {
 		viper.Set("insecure_skip", true)
 	}
 	if viper.GetBool("insecure_skip") {
-		logger.Warn("TLS verification is disabled due to --insecure-skip (use only for trusted/self-signed targets)")
+		logger.Warn("TLS verification is disabled due to -insecure-skip flag (use only for trusted/self-signed targets)")
+	}
+
+	if *insecureSshFlag {
+		viper.Set("insecuressh", true)
+	}
+	if *knownHostsFilePtr != "" {
+		viper.Set("sshknownhostsfile", *knownHostsFilePtr)
+	}
+	if viper.GetBool("insecuressh") {
+		logger.Warn("SSH host key verification is disabled due to -insecure-ssh. Use only for trusted networks.")
 	}
 
 	// Update logger output if log_file changed
@@ -393,6 +427,8 @@ host_ip_file: host_ips.txt  # File with direct host IPs (or env GETTOR_HOST_IP_F
 # host_timeout_minutes: 2  # Per-host processing timeout
 # log_file: getTor.log  # Log file path
 # insecure_skip: false  # Set true to skip TLS certificate verification (NOT recommended)
+# sshknownhostsfile: "/path/to/your/known_hosts" # Optional: Path to SSH known_hosts file. Defaults to ~/.ssh/known_hosts.
+# insecuressh: false # Optional: Set to true to skip SSH host key verification. NOT RECOMMENDED.
 # debug: true # Set Debug true/false # Feature not yet implemented!!
 `
 
@@ -512,70 +548,90 @@ func fetchHostIps(pcIp string) ([]string, error) {
 	return nil, fmt.Errorf("failed to fetch hosts from %s after %d attempts: %v", pcIp, maxRetries, err)
 }
 
-// sshConnect establishes an SSH client connection with exponential backoff
+// sshConnect establishes an SSH client connection with proper host key validation.
 func sshConnect(hostIp string) (*ssh.Client, error) {
-	var client *ssh.Client
-	var err error
 	var auth []ssh.AuthMethod
-
-	// Prefer key if provided, else password
+	// --- Start of Fix ---
+	// Corrected viper keys to match the rest of the application (e.g., "ssh_key_file" instead of "sshkeyfile")
 	keyPath := viper.GetString("ssh_key_file")
 	pass := viper.GetString("ssh_pass")
+	// --- End of Fix ---
+
 	if keyPath != "" {
 		key, err := os.ReadFile(keyPath)
 		if err != nil {
-			return nil, fmt.Errorf("unable to read private key: %v", err)
+			return nil, fmt.Errorf("unable to read private key '%s': %v", keyPath, err)
 		}
 		signer, err := ssh.ParsePrivateKey(key)
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse private key: %v", err)
 		}
 		auth = append(auth, ssh.PublicKeys(signer))
-		logger.Info("Using SSH key authentication")
+		logger.WithField("host", hostIp).Debug("Using SSH key authentication.")
 	} else if pass != "" {
 		auth = append(auth, ssh.Password(pass))
-		logger.Warn("Using SSH password authentication (less secure; consider switching to keys)")
+		logger.WithField("host", hostIp).Warn("Using SSH password authentication. Consider switching to keys for better security.")
 	} else {
-		return nil, fmt.Errorf("no SSH authentication method provided")
+		return nil, fmt.Errorf("no SSH authentication method provided for host %s", hostIp)
 	}
 
+	var hostKeyCallback ssh.HostKeyCallback
+	var err error
+
+	if viper.GetBool("insecuressh") {
+		hostKeyCallback = ssh.InsecureIgnoreHostKey()
+	} else {
+		knownHostsPath := viper.GetString("sshknownhostsfile")
+		if knownHostsPath == "" {
+			currentUser, err := user.Current()
+			if err != nil {
+				return nil, fmt.Errorf("could not determine current user for known_hosts path: %v", err)
+			}
+			knownHostsPath = filepath.Join(currentUser.HomeDir, ".ssh", "known_hosts")
+		}
+
+		hostKeyCallback, err = knownhosts.New(knownHostsPath)
+		if err != nil {
+			return nil, fmt.Errorf("could not create hostkeycallback from known_hosts file '%s': %v", knownHostsPath, err)
+		}
+		logger.WithFields(logrus.Fields{
+			"host": hostIp,
+			"file": knownHostsPath,
+		}).Debug("Using known_hosts file for SSH host key verification.")
+	}
+
+	config := &ssh.ClientConfig{
+		User:            viper.GetString("ssh_user"),
+		Auth:            auth,
+		HostKeyCallback: hostKeyCallback,
+		Timeout:         viper.GetDuration("ssh_timeout_seconds") * time.Second,
+	}
+
+	var client *ssh.Client
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		logger.WithFields(logrus.Fields{
 			"host":    hostIp,
-			"user":    sshUser,
+			"user":    config.User,
 			"attempt": attempt,
-		}).Debug("Connecting via SSH")
-		// Read and parse the allowed host public key (host key file configured via ssh_host_key_file)
-		hostKeyPath := viper.GetString("ssh_host_key_file")
-		if hostKeyPath == "" {
-			return nil, fmt.Errorf("missing required SSH host key file config (ssh_host_key_file)")
-		}
-		publicKeyBytes, err := os.ReadFile(hostKeyPath)
-		if err != nil {
-			return nil, fmt.Errorf("unable to read SSH host key file: %v", err)
-		}
-		publicKey, err := ssh.ParsePublicKey(publicKeyBytes)
-		if err != nil {
-			return nil, fmt.Errorf("unable to parse SSH host public key: %v", err)
-		}
+		}).Debug("Connecting via SSH...")
 
-		config := &ssh.ClientConfig{
-			User:            sshUser,
-			Auth:            auth,
-			HostKeyCallback: ssh.FixedHostKey(publicKey),
-			Timeout:         sshTimeout,
-		}
 		client, err = ssh.Dial("tcp", hostIp+":22", config)
 		if err == nil {
 			logger.WithField("host", hostIp).Info("SSH connection established")
 			return client, nil
 		}
+
 		logger.WithError(err).WithFields(logrus.Fields{
 			"host":    hostIp,
 			"attempt": attempt,
 		}).Warn("SSH connection failed")
-		time.Sleep(baseRetryDelay * time.Duration(math.Pow(2, float64(attempt-1))))
+
+		if attempt < maxRetries {
+			delay := baseRetryDelay * time.Duration(math.Pow(2, float64(attempt-1)))
+			time.Sleep(delay)
+		}
 	}
+
 	return nil, fmt.Errorf("failed to connect to %s after %d attempts: %v", hostIp, maxRetries, err)
 }
 
@@ -1109,4 +1165,64 @@ func writeCsv(data []map[string]string) error {
 
 	logger.WithField("file", csvFile).Info("Results written to CSV")
 	return nil
+}
+
+// printEnvironmentVariables displays a help-like message for supported environment variables.
+func printEnvironmentVariables() {
+	fmt.Println("This application can be configured using environment variables.")
+	fmt.Println("The prefix 'GETTOR_' is required for all variables.")
+	fmt.Println("\n--- General Configuration ---")
+	fmt.Printf("  %-30s %s\n", "GETTOR_CONFIG", "Path to the configuration file (e.g., /path/to/config.yaml)")
+	fmt.Printf("  %-30s %s\n", "GETTOR_DEBUG", "Set to 'true' to enable verbose debug logging")
+	fmt.Printf("  %-30s %s\n", "GETTOR_LOG_FILE", "Path for the log file (Default: getTor.log)")
+
+	fmt.Println("\n--- API Configuration (for --pcs mode) ---")
+	fmt.Printf("  %-30s %s\n", "GETTOR_API_USER", "Username for the Prism Central API (Default: admin)")
+	fmt.Printf("  %-30s %s\n", "GETTOR_API_PASS", "Password for the Prism Central API (Required for --pcs)")
+	fmt.Printf("  %-30s %s\n", "GETTOR_INSECURE_SKIP_TLS", "Set to 'true' to disable TLS certificate verification")
+
+	fmt.Println("\n--- SSH Configuration ---")
+	fmt.Printf("  %-30s %s\n", "GETTOR_SSH_USER", "Username for SSH connections (Default: root)")
+	fmt.Printf("  %-30s %s\n", "GETTOR_SSH_PASS", "Password for SSH connections")
+	fmt.Printf("  %-30s %s\n", "GETTOR_SSH_KEY_FILE", "Full path to your SSH private key file (recommended)")
+	fmt.Printf("  %-30s %s\n", "GETTOR_INSECURE_SSH", "Set to 'true' to skip SSH host key verification (NOT recommended)")
+	fmt.Printf("  %-30s %s\n", "GETTOR_SSH_KNOWN_HOSTS_FILE", "Path to SSH known_hosts file (Default: ~/.ssh/known_hosts)")
+
+	fmt.Println("\n--- File and Directory Paths ---")
+	fmt.Printf("  %-30s %s\n", "GETTOR_PC_IP_FILE", "File with Prism Central IPs (Default: pcips.txt)")
+	fmt.Printf("  %-30s %s\n", "GETTOR_HOST_IP_FILE", "File with direct host IPs (Default: hostips.txt)")
+	fmt.Printf("  %-30s %s\n", "GETTOR_CSV_FILE", "Output CSV file name (Default: lldp_neighbors.csv)")
+	fmt.Printf("  %-30s %s\n", "GETTOR_DEBUG_DIR", "Directory to save command output logs (Default: debug_output)")
+
+	fmt.Println("\n--- Performance Tuning ---")
+	fmt.Printf("  %-30s %s\n", "GETTOR_MAX_THREADS", "Maximum concurrent host connections (Default: 10)")
+}
+
+// setupLogging configures the global logger, including file output and rotation.
+func setupLogging() {
+	if viper.GetBool("debug") {
+		logger.SetLevel(logrus.DebugLevel)
+		logger.Debug("Debug mode enabled")
+	}
+
+	// Configure log rotation with lumberjack
+	logFile := viper.GetString("log_file")
+	lumberjackLogger := &lumberjack.Logger{
+		Filename:   logFile,
+		MaxSize:    viper.GetInt("log_max_size"),    // megabytes
+		MaxBackups: viper.GetInt("log_max_backups"), // number of backups
+		MaxAge:     viper.GetInt("log_max_age"),     // days
+		Compress:   viper.GetBool("log_compress"),   // compress old logs
+	}
+
+	// Set logger to write to both file and stdout
+	multiWriter := io.MultiWriter(os.Stdout, lumberjackLogger)
+	logger.SetOutput(multiWriter)
+
+	logger.WithFields(logrus.Fields{
+		"file":    logFile,
+		"size":    viper.GetInt("log_max_size"),
+		"backups": viper.GetInt("log_max_backups"),
+		"age":     viper.GetInt("log_max_age"),
+	}).Info("Logging configured with rotation")
 }
