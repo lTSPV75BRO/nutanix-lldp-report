@@ -27,7 +27,7 @@ Use this tool at your own risk. Ensure proper permissions and testing in non-pro
 
 ## Requirements
 
-- Go 1.20+ environment
+- Go 1.20+ environment (To build)
 - SSH access configured on hosts
 - Nutanix Prism Central API credentials
 
@@ -54,6 +54,9 @@ getTor
 | `-create-config`         | Generate a dummy config file and exit                            | `-create-config`                     |
 | `-debug`                 | Enable verbose debug output                                        | `-debug`                            |
 | `-insecure-skip`         | Skip TLS certificate verification                                 | `-insecure-skip`                     |
+| `-insecure-ssh`         | Skip SSH host key verification (NOT recommended)                   | `-insecure-ssh`                     |
+| `-show-env`                 | Display environment variables that can be used                | `-show-env`                            |
+| `-ssh-known-hosts`         | Path to SSH known_hosts file (defaults to ~/.ssh/known_hosts)   `-ssh-known-hosts /path/to/known_hosts` |
 | `-version`               | Show version and build details                                    | `-version`                          |
 
 ### Example
@@ -65,23 +68,28 @@ getTor
 
 You can customize the operation via a YAML file:  
 
-```api_user: admin  
-api_pass: yourapipass  
-ssh_user: root  
-ssh_pass: yoursshpass  
-ssh_key_file: /path/to/key  
-pc_ip_file: pc_ips.txt  
-host_ip_file: host_ips.txt  
-csv_file: output.csv  
-max_threads: 20  
-debug_dir: my_debug  
-max_retries: 5  
-base_retry_delay_seconds: 3  
-api_timeout_seconds: 15  
-ssh_timeout_seconds: 15  
-command_timeout_seconds: 10  
-host_timeout_minutes: 5  
-log_file: mylog.log
+```
+api_user: admin
+# api_pass: yourapipass_here                                # Provide your PC API password or override with --apipass or env GETTOR_API_PASS
+ssh_user: root
+# ssh_pass: your_ssh_password_here                          # SSH password (less secure; prefer ssh_key_file or env GETTOR_SSH_PASS)
+# ssh_key_file: /path/to/private_key                        # Preferred SSH key file path (or env GETTOR_SSH_KEY_FILE)
+pc_ip_file: pc_ips.txt                                      # File with Nutanix PC IPs for --pcs (or env GETTOR_PC_IP_FILE)
+host_ip_file: host_ips.txt                                  # File with direct host IPs (or env GETTOR_HOST_IP_FILE)
+# csv_file: lldp_neighbors.csv                              # Output CSV filename
+# max_threads: 10                                           # Max concurrent threads
+# debug_dir: debug_output                                   # Directory for debug outputs
+# max_retries: 3                                            # Max retries for operations
+# base_retry_delay_seconds: 2                               # Base delay for retries
+# api_timeout_seconds: 10                                   # API request timeout
+# ssh_timeout_seconds: 10                                   # SSH connection timeout
+# command_timeout_seconds: 5                                # SSH command timeout
+# host_timeout_minutes: 2                                   # Per-host processing timeout
+# log_file: getTor.log                                      # Log file path
+# insecure_skip: false                                      # Set true to skip TLS certificate verification (NOT recommended)
+# sshknownhostsfile: "/path/to/your/known_hosts"            # Optional: Path to SSH known_hosts file. Defaults to ~/.ssh/known_hosts.
+# insecuressh: false                                        # Optional: Set to true to skip SSH host key verification. NOT RECOMMENDED.
+# debug: true                                               # Set Debug true/false # Feature not yet implemented!!
 ```
 
 ---
