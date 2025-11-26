@@ -79,7 +79,7 @@ import (
 
 // Embedded version info (set via ldflags during build, e.g., go build -ldflags="-X main.version=1.0.0 -X main.buildDate=$(date +%Y-%m-%d)")
 var (
-	version   = "1.0.3"
+	version   = "1.0.5"
 	buildDate = "unknown"
 )
 
